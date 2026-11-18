@@ -43,6 +43,12 @@ Keep the tone sharp, factual, and senior-executive ready.
         )
     return briefing_text
 
+def fetch_top_news():
+    """
+    Alias delegating to fetch_curated_intelligence for backward compatibility with daemon.py.
+    """
+    return fetch_curated_intelligence()
+
 def format_outreach_in_chat(records):
     """
     Formats outreach records for in-chat reading with clickable profile and post links (zero-tap access).

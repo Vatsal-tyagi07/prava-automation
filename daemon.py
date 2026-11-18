@@ -75,17 +75,22 @@ def send_telegram_briefing(text_summary, csv_path=None):
     # 1. ALWAYS send the text summary first (never blocked by file issues)
     url_msg = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     
-    # Handle message length limit (4096 chars)
+    # Handle message length limit (4096 chars) safely
     chunks = []
-    if len(text_summary) > 4000:
-        parts = text_summary.split("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-        if len(parts) >= 3:
-            chunks.append(parts[0] + "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" + parts[1])
-            chunks.append("━━━━━━━━━━━━━━━━━━━━━━━━━━" + "━━━━━━━━━━━━━━━━━━━━━━━━━━".join(parts[2:]))
-        else:
-            chunks = [text_summary[:4000], text_summary[4000:]]
-    else:
+    if len(text_summary) <= 3800:
         chunks = [text_summary]
+    else:
+        current_chunk = []
+        current_len = 0
+        for line in text_summary.split("\n"):
+            if current_len + len(line) + 1 > 3800 and current_chunk:
+                chunks.append("\n".join(current_chunk))
+                current_chunk = []
+                current_len = 0
+            current_chunk.append(line)
+            current_len += len(line) + 1
+        if current_chunk:
+            chunks.append("\n".join(current_chunk))
         
     for chunk in chunks:
         payload = {
@@ -155,8 +160,13 @@ def run_module_c():
             
         csv_file = db.export_today_csv(OUTPUT_CSV_PATH, today_str, custom_records=records)
         
-        # 2. Fetch top news
-        news_analysis = briefing.fetch_top_news()
+        # 2. Fetch top news (resilient across function name variations)
+        if hasattr(briefing, "fetch_top_news"):
+            news_analysis = briefing.fetch_top_news()
+        elif hasattr(briefing, "fetch_curated_intelligence"):
+            news_analysis = briefing.fetch_curated_intelligence()
+        else:
+            news_analysis = "Top global intelligence summary."
         
         # 3. Format Executive Dossier
         now_str = now_ist.strftime("%B %d, %Y • %I:%M %p %Z")
@@ -219,9 +229,9 @@ def daemon_loop():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Prava Autonomous Agent Daemon")
     parser.add_argument("--run-all", action="store_true", help="Run full dry run of all modules immediately")
-    parser.add_argument("--episode-now", action="store_true", help="Trigger Episode generation immediately")
-    parser.add_argument("--outreach-now", action="store_true", help="Trigger Lead Outreach immediately")
-    parser.add_argument("--briefing-now", action="store_true", help="Trigger Evening Briefing immediately")
+    parser.add_argument("--episode-now", "--once-content", dest="episode_now", action="store_true", help="Trigger Episode generation immediately")
+    parser.add_argument("--outreach-now", "--once-outreach", dest="outreach_now", action="store_true", help="Trigger Lead Outreach immediately")
+    parser.add_argument("--briefing-now", "--once-briefing", dest="briefing_now", action="store_true", help="Trigger Evening Briefing immediately")
     parser.add_argument("--daemon", action="store_true", help="Run persistent scheduling loop")
     
     args = parser.parse_args()
