@@ -1,0 +1,34 @@
+steps:
+  # 1. Build Docker Container
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/prava-automation-514816/prava-pipeline-service:latest', '.']
+
+  # 2. Push Image to Google Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/prava-automation-514816/prava-pipeline-service:latest']
+
+  # 3. Deploy to Google Cloud Run (asia-south1)
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'prava-pipeline-service'
+      - '--image'
+      - 'gcr.io/prava-automation-514816/prava-pipeline-service:latest'
+      - '--region'
+      - 'asia-south1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '2Gi'
+      - '--cpu'
+      - '2'
+      - '--timeout'
+      - '300s'
+      - '--set-env-vars'
+      - 'GEMINI_API_KEY=AQ.Ab8RN6K2Ow9ZQZPR198Ps89OYE4MEr7FYhWSa92P58JgqlPXjA,TELEGRAM_BOT_TOKEN=9245204036:AAGHlHilMstsWDgJubVoLkpsL7iE0QPjz2w,TELEGRAM_CHAT_ID=5393017337,X_CLIENT_ID=WlVHaUVXOVExVmJPLWI0V0ZOWTk6MTpjaQ,X_CLIENT_SECRET=EUX0CjxJRLDhOEYXrYv6cJOzQy7ClQ32z3Fo40LLI-f7KdZnAn,THREADS_APP_ID=1045272008586779'
+
+images:
+  - 'gcr.io/prava-automation-514816/prava-pipeline-service:latest'

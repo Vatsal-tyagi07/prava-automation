@@ -1,0 +1,11 @@
+.git
+.github
+__pycache__/
+*.pyc
+output/
+*.mp4
+*.avi
+*.mp3
+*.db
+daemon.log
+.env.bak
