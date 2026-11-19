@@ -1,7 +1,7 @@
 {
-  "current_episode": 26,
-  "last_topic": "The Transformer Architecture (Encoder-Decoder Fusion)",
-  "next_topic": "Positional Encoding (Teaching Math the Order of Words)",
+  "current_episode": 27,
+  "last_topic": "Positional Encoding (Teaching Math the Order of Words)",
+  "next_topic": "Feed-Forward Layers & Long-Term Memory Storage",
   "sequence": {
     "22": "The Attention Mechanism (Query, Key, Value & The Context Spotlight)",
     "23": "Self-Attention & Mutual Word Resonance",
@@ -60,6 +60,14 @@
       "completed_at": "2026-11-17T23:14:54.702526",
       "video_path": "C:\\Users\\hp\\.gemini\\antigravity\\scratch\\prava-autonomous-agent\\output\\episodes\\EP_25\\video.mp4",
       "audio_path": "C:\\Users\\hp\\.gemini\\antigravity\\scratch\\prava-autonomous-agent\\output\\episodes\\EP_25\\voiceover.mp3"
+    },
+    {
+      "episode_number": 26,
+      "topic": "Positional Encoding (Teaching Math the Order of Words)",
+      "analogy_used": "Airport luggage conveyor with harmonic wave barcode stamps",
+      "completed_at": "2026-11-19T18:09:18.000605",
+      "video_path": "C:\\Users\\hp\\.gemini\\antigravity\\scratch\\prava-autonomous-agent\\output\\episodes\\EP_26\\video.mp4",
+      "audio_path": "C:\\Users\\hp\\.gemini\\antigravity\\scratch\\prava-autonomous-agent\\output\\episodes\\EP_26\\voiceover.mp3"
     }
   ]
 }

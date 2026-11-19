@@ -16,34 +16,42 @@ def clean_script_for_tts(raw_text):
     """
     Strips all bracketed timestamps, staging notes, physical body delivery cues,
     and markdown artifacts so only pure, natural human spoken words are sent to TTS.
+    Injects natural micro-pauses for conversational rhythm.
     """
     text = raw_text
-    # If the text has sections, extract clean narration section if present
+    # Extract clean narration section if present
     if "## 3. CLEAN SPOKEN NARRATION" in text:
         text = text.split("## 3. CLEAN SPOKEN NARRATION")[1].split("##")[0]
     elif "## 1. SPOKEN SCRIPT" in text:
         text = text.split("## 1. SPOKEN SCRIPT")[1].split("## 2.")[0]
         
-    # Strip bracketed cues like [0:00 - 0:02 | Hook: Intense direct eye contact]
+    # Strip bracketed cues like [0:00 - 0:02 | Hook: ...]
     text = re.sub(r"\[.*?\]", "", text)
     # Strip markdown headers, asterisks, bullets
     text = re.sub(r"#+\s*", "", text)
     text = re.sub(r"\*\*|\*", "", text)
     text = re.sub(r"__|_", "", text)
-    # Normalize whitespaces and linebreaks
+    text = re.sub(r"`.*?`", "", text)
+    
+    # Normalize whitespace
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     cleaned = " ".join(lines)
-    # Ensure natural micro-pauses by cleaning punctuation spacing
-    cleaned = re.sub(r"\s+([.,!?;:])", r"\1", cleaned)
-    cleaned = re.sub(r"([.,!?;:])\s*", r"\1 ", cleaned).strip()
-    # Brand phonetic correction so TTS never pronounces 'Prava' as 'Brava'
+    
+    # Brand phonetic correction so speech engines never mispronounce 'Prava' as 'Brava'
     cleaned = re.sub(r"\bPrava\b", "Prah-va", cleaned)
     cleaned = re.sub(r"\bprava\b", "prah-va", cleaned)
+    
+    # Ensure natural conversational cadence with micro-pauses
+    cleaned = re.sub(r"\s*—\s*", "... ", cleaned)
+    cleaned = re.sub(r"\s*\.\.\.\s*", "... ", cleaned)
+    cleaned = re.sub(r"\s+([.,!?;:])", r"\1", cleaned)
+    cleaned = re.sub(r"([.,!?;:])\s*", r"\1 ", cleaned).strip()
+    
     return cleaned
 
 def synthesize_with_gemini_tts(text, output_mp3_path, voice_name="Aoede"):
     """
-    Synthesizes speech using Gemini Studio TTS (gemini-3.8-flash-tts or gemini-2.5-flash-preview-tts).
+    Synthesizes speech using Gemini Studio TTS (Aoede or Kore).
     Converts PCM/WAV output into high-definition MP3 using FFmpeg.
     """
     models = ["gemini-3.8-flash-tts", "gemini-2.5-flash-preview-tts"]
@@ -64,7 +72,7 @@ def synthesize_with_gemini_tts(text, output_mp3_path, voice_name="Aoede"):
             }
         }
         try:
-            print(f"[TTS] Requesting high-definition voice ({voice_name}) via {model}...")
+            print(f"[TTS] Requesting conversational studio voice ({voice_name}) via {model}...")
             resp = requests.post(url, json=payload, timeout=45)
             if resp.status_code == 200:
                 data = resp.json()
@@ -77,7 +85,6 @@ def synthesize_with_gemini_tts(text, output_mp3_path, voice_name="Aoede"):
                     with open(temp_wav, "wb") as f:
                         f.write(raw_audio_bytes)
                     
-                    # Convert to 192k MP3 via FFmpeg
                     cmd = [
                         "ffmpeg", "-y",
                         "-i", temp_wav,
@@ -97,24 +104,39 @@ def synthesize_with_gemini_tts(text, output_mp3_path, voice_name="Aoede"):
             
     return False
 
-async def synthesize_fallback_edge_tts(text, output_mp3_path):
+async def synthesize_fallback_edge_tts(text, output_mp3_path, voice="hi-IN-MadhurNeural"):
     """
-    High-fidelity neural fallback voice (ChristopherNeural - warm, intellectual science narrator).
+    Natural conversational Hinglish voiceover via Edge-TTS (hi-IN-MadhurNeural or hi-IN-SwaraNeural).
     """
-    print("[TTS] Utilizing high-fidelity neural narrator voice (ChristopherNeural)...")
-    voice = "en-US-ChristopherNeural"
-    communicate = edge_tts.Communicate(text, voice, rate="+1%", pitch="-1Hz")
+    print(f"[TTS] Synthesizing conversational voiceover with Edge-TTS ({voice})...")
+    communicate = edge_tts.Communicate(text, voice, rate="+2%", pitch="-1Hz")
     await communicate.save(output_mp3_path)
+    print(f"[TTS] Edge-TTS voiceover saved to: {output_mp3_path}")
     return True
 
 def generate_voiceover(raw_text, output_mp3_path, voice_name="Aoede"):
     clean_text = clean_script_for_tts(raw_text)
     print(f"[TTS] Cleaned spoken narration length: {len(clean_text)} characters.")
     
-    # Try Gemini HD Studio Voice first
-    success = synthesize_with_gemini_tts(clean_text, output_mp3_path, voice_name=voice_name)
-    if not success:
-        print("[TTS] Falling back to neural science narrator voice...")
-        asyncio.run(synthesize_fallback_edge_tts(clean_text, output_mp3_path))
+    # 1. Try Gemini HD Studio Voice first
+    success = False
+    if API_KEY:
+        success = synthesize_with_gemini_tts(clean_text, output_mp3_path, voice_name=voice_name)
         
+    # 2. High-fidelity Hinglish conversational fallback
+    if not success:
+        print("[TTS] Falling back to conversational Hinglish voice (hi-IN-MadhurNeural)...")
+        try:
+            asyncio.run(synthesize_fallback_edge_tts(clean_text, output_mp3_path, voice="hi-IN-MadhurNeural"))
+            success = True
+        except Exception as e:
+            print(f"[TTS] Edge-TTS Madhur failed: {e}. Trying SwaraNeural...")
+            try:
+                asyncio.run(synthesize_fallback_edge_tts(clean_text, output_mp3_path, voice="hi-IN-SwaraNeural"))
+                success = True
+            except Exception as e2:
+                print(f"[TTS] Edge-TTS Swara failed: {e2}. Trying en-IN-PrabhatNeural...")
+                asyncio.run(synthesize_fallback_edge_tts(clean_text, output_mp3_path, voice="en-IN-PrabhatNeural"))
+                success = True
+                
     return clean_text

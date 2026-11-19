@@ -41,7 +41,7 @@ def build_caption_timeline(script_text, total_duration):
     
     for i, w in enumerate(words):
         current_chunk.append((w, i * time_per_word, (i + 1) * time_per_word))
-        is_break = any(w.endswith(p) for p in [".", "?", "!", "—", ","])
+        is_break = any(w.endswith(p) for p in [".", "?", "!", "—", ",", "..."])
         if len(current_chunk) >= 5 or (len(current_chunk) >= 3 and is_break) or i == total_words - 1:
             chunk_start = current_chunk[0][1]
             chunk_end = current_chunk[-1][2]
@@ -56,284 +56,371 @@ def build_caption_timeline(script_text, total_duration):
             
     return chunks
 
-def render_scene_1_token_overload(draw, width, height, t, progress, fonts):
-    """
-    SCENE 1 (0:00 - 0:10): The Token River & Input Intake
-    Isometric server rack tower with thousands of text tokens streaming down
-    into an intake funnel. Camera drifts dynamically with slight continuous zoom.
-    """
-    drift_x = int(math.sin(t * 1.5) * 30)
-    drift_y = int(math.cos(t * 1.2) * 20)
+def get_fonts():
+    # Load system or fallback fonts
+    font_candidates = [
+        "C:\\Windows\\Fonts\\arialbd.ttf",
+        "C:\\Windows\\Fonts\\arial.ttf",
+        "C:\\Windows\\Fonts\\seguiemj.ttf",
+        "C:\\Windows\\Fonts\\consola.ttf"
+    ]
+    header_font = None
+    subhead_font = None
+    small_font = None
+    mono_font = None
+    caption_font = None
+    time_font = None
     
-    # Background grid with perspective drift
-    draw.rectangle([0, 0, width, height], fill=COLOR_PRUSSIAN_INK)
-    for gx in range(-100, width + 100, 75):
-        draw.line([(gx + drift_x, 0), (gx + drift_x + 350, height)], fill=(16, 26, 42), width=1)
-        draw.line([(gx + drift_x + 350, 0), (gx + drift_x, height)], fill=(16, 26, 42), width=1)
+    for p in font_candidates:
+        if os.path.exists(p):
+            try:
+                header_font = ImageFont.truetype(p, 42)
+                subhead_font = ImageFont.truetype(p, 26)
+                small_font = ImageFont.truetype(p, 22)
+                mono_font = ImageFont.truetype(p, 20)
+                caption_font = ImageFont.truetype(p, 46)
+                time_font = ImageFont.truetype(p, 22)
+                break
+            except Exception:
+                pass
+                
+    if header_font is None:
+        default = ImageFont.load_default()
+        header_font = default
+        subhead_font = default
+        small_font = default
+        mono_font = default
+        caption_font = default
+        time_font = default
         
-    # Isometric Server Intake Chassis
-    chassis_cx = width // 2 + drift_x // 2
-    chassis_cy = 520 + drift_y // 2
-    
-    # Tower base shadow
-    draw.ellipse([chassis_cx - 360, chassis_cy + 180, chassis_cx + 360, chassis_cy + 320], fill=(8, 14, 24))
-    
-    # 3D Intake Funnel (Top)
-    funnel_rx, funnel_ry = 320, 140
-    draw.ellipse([chassis_cx - funnel_rx, chassis_cy - funnel_ry,
-                  chassis_cx + funnel_rx, chassis_cy + funnel_ry], fill=(20, 34, 56), outline=COLOR_CYAN_GLOW, width=4)
-    draw.ellipse([chassis_cx - funnel_rx + 40, chassis_cy - funnel_ry + 20,
-                  chassis_cx + funnel_rx - 40, chassis_cy + funnel_ry - 20], fill=(12, 18, 30), outline=COLOR_SOLAR_AMBER, width=2)
-                  
-    # Streaming Input Tokens Raining Down (High speed)
-    tokens = ["def", "query", "user_input", "context", "history", "payload", "tokens", "batch", "tensor", "1000_lines"]
-    for i in range(16):
-        tok_speed = 320 + (i * 35) % 150
-        tok_y = int((t * tok_speed + i * 90) % (chassis_cy + 100))
-        tok_x = chassis_cx + int(240 * math.sin(i * 1.7 + t * 2.0) * (1.0 - (tok_y / (chassis_cy + 120)) * 0.7))
-        tok_text = tokens[i % len(tokens)]
-        
-        # Token pill box
-        pill_w = fonts["small"].getbbox(tok_text)[2] + 16
-        draw.rounded_rectangle([tok_x - pill_w // 2, tok_y - 12, tok_x + pill_w // 2, tok_y + 12],
-                               radius=6, fill=COLOR_BASALT_SLATE, outline=COLOR_CYAN_GLOW, width=1)
-        draw.text((tok_x, tok_y), tok_text, fill=COLOR_WARM_CREAM, font=fonts["mono_small"], anchor="mm")
-        
-    # Lower Collector Reservoir
-    draw.rectangle([chassis_cx - 180, chassis_cy, chassis_cx + 180, chassis_cy + 220],
-                   fill=(16, 26, 44), outline=COLOR_FOREST_SAGE, width=3)
-    draw.ellipse([chassis_cx - 180, chassis_cy + 220 - 45, chassis_cx + 180, chassis_cy + 220 + 45],
-                 fill=(14, 22, 38), outline=COLOR_FOREST_SAGE, width=3)
-                 
-    # HUD Alert Overlay
-    draw.rectangle([chassis_cx - 250, 180, chassis_cx + 250, 230], fill=(14, 20, 32, 220), outline=COLOR_CORAL, width=2)
-    pulse_dot = "●" if (int(t * 3) % 2 == 0) else "○"
-    draw.text((chassis_cx, 205), f"{pulse_dot} PROMPT INGESTION: 1,000+ TOKENS STREAMING", fill=COLOR_CORAL, font=fonts["small"], anchor="mm")
+    return {
+        "header": header_font,
+        "subhead": subhead_font,
+        "small": small_font,
+        "mono_small": mono_font,
+        "caption": caption_font,
+        "time": time_font
+    }
 
-def render_scene_2_encoder_chamber(draw, width, height, t, progress, fonts):
-    """
-    SCENE 2 (0:10 - 0:22): The Encoder (The Master Sous-Chef)
-    Isometric multi-layer digestion chamber compressing raw sequence into a rich
-    contextual stock pot. Continuous 45-degree angle drift.
-    """
+def draw_perspective_grid(draw, width, height, t, drift_speed=1.5):
+    """Clean technical perspective grid with continuous camera drift."""
+    drift_x = int(math.sin(t * drift_speed) * 25)
+    drift_y = int(math.cos(t * drift_speed * 0.8) * 15)
     draw.rectangle([0, 0, width, height], fill=COLOR_PRUSSIAN_INK)
-    
-    drift = int(math.sin(t * 2.0) * 25)
-    center_x = width // 2 + drift
-    center_y = 500
-    
-    draw.text((width // 2, 170), "THE ENCODER: MASTER SOUS-CHEF", fill=COLOR_CYAN_GLOW, font=fonts["header"], anchor="mm")
-    draw.text((width // 2, 215), "Parallel Processing: Digesting Entire Sequence All At Once",
-              fill=COLOR_WARM_CREAM, font=fonts["subhead"], anchor="mm")
-              
-    # 6 Stacked Isometric Compression Plates (N=6 Layers)
-    for layer in range(6):
-        ly = center_y + 160 - layer * 52
-        rx, ry = 310 - layer * 15, 110 - layer * 6
-        
-        # Plate drop shadow
-        draw.ellipse([center_x - rx, ly + 14 - ry, center_x + rx, ly + 14 + ry], fill=(8, 14, 22))
-        
-        # Isometric plate
-        plate_color = (22, 36, 58) if layer < 5 else COLOR_FOREST_SAGE
-        draw.ellipse([center_x - rx, ly - ry, center_x + rx, ly + ry],
-                     fill=plate_color, outline=COLOR_CYAN_GLOW, width=2)
-                     
-        # Layer label
-        draw.text((center_x - rx + 35, ly), f"LAYER {layer+1}", fill=COLOR_WARM_CREAM, font=fonts["mono_small"], anchor="lm")
-        
-        # Energy scanning beams between plates
-        scan_offset = math.sin(t * 5.0 + layer) * (rx - 40)
-        draw.line([(center_x + scan_offset, ly - ry), (center_x + scan_offset, ly + ry)],
-                  fill=COLOR_SOLAR_AMBER, width=3)
-                  
-    # Central Condensed Stock Pot (Concentrated Context Sphere)
-    core_y = center_y - 180
-    pulse_r = int(65 + 10 * math.sin(t * 8.0))
-    draw.ellipse([center_x - pulse_r - 20, core_y - pulse_r - 20,
-                  center_x + pulse_r + 20, core_y + pulse_r + 20], outline=COLOR_SOLAR_AMBER, width=2)
-    draw.ellipse([center_x - pulse_r, core_y - pulse_r, center_x + pulse_r, core_y + pulse_r],
-                 fill=COLOR_CORAL, outline=COLOR_CRISP_WHITE, width=4)
-    draw.text((center_x, core_y), "CONTEXT\nSTOCK", fill=COLOR_WARM_CREAM, font=fonts["small"], anchor="mm")
+    for gx in range(-150, width + 150, 80):
+        draw.line([(gx + drift_x, 0), (gx + drift_x + 300, height)], fill=(16, 26, 42), width=1)
+        draw.line([(gx + drift_x + 300, 0), (gx + drift_x, height)], fill=(16, 26, 42), width=1)
+    return drift_x, drift_y
 
-def render_scene_3_decoder_station(draw, width, height, t, progress, fonts):
+def render_scene_order_chaos(draw, width, height, t, scene_meta, fonts):
     """
-    SCENE 3 (0:22 - 0:35): The Decoder (The Master Plating Chef)
-    Perspective snaps to the right station: An automated conveyor where new tokens
-    are plated one by one in autoregressive sequence.
+    SCENE: ORDER CHAOS / THE BAG OF WORDS TRAP
+    Visualizes the fundamental problem: words arriving unordered in parallel.
+    Flipping comparison tiles ('DOG BITES MAN' vs 'MAN BITES DOG') with alert beacons.
     """
-    draw.rectangle([0, 0, width, height], fill=COLOR_PRUSSIAN_INK)
+    drift_x, drift_y = draw_perspective_grid(draw, width, height, t, drift_speed=2.0)
+    cx, cy = width // 2 + drift_x // 2, 530 + drift_y // 2
     
-    draw.text((width // 2, 170), "THE DECODER: PLATING CHEF", fill=COLOR_SOLAR_AMBER, font=fonts["header"], anchor="mm")
-    draw.text((width // 2, 215), "Autoregressive Generation: Assembling Word By Word",
-              fill=COLOR_WARM_CREAM, font=fonts["subhead"], anchor="mm")
-              
+    # Header HUD
+    title = scene_meta.get("title", "THE BAG OF WORDS TRAP")
+    subtitle = scene_meta.get("subtitle", "Order Confusion: 'Dog Bites Man' vs 'Man Bites Dog'")
+    draw.text((width // 2, 170), title, fill=COLOR_CORAL, font=fonts["header"], anchor="mm")
+    draw.text((width // 2, 220), subtitle, fill=COLOR_WARM_CREAM, font=fonts["subhead"], anchor="mm")
+    
+    # Alert Warning Box
+    pulse = 0.5 + 0.5 * math.sin(t * 8.0)
+    box_col = COLOR_CORAL if pulse > 0.4 else COLOR_BASALT_SLATE
+    draw.rounded_rectangle([cx - 320, 260, cx + 320, 310], radius=8, fill=(18, 22, 34), outline=box_col, width=2)
+    draw.text((cx, 285), "⚠️ ALERT: PARALLEL TOKENS LACK TEMPORAL ORDER", fill=COLOR_CORAL, font=fonts["small"], anchor="mm")
+    
+    # Two Conflicting Word Sequences flipping and colliding
+    flip_cycle = math.sin(t * 3.5)
+    y_seq1 = cy - 80
+    y_seq2 = cy + 80
+    
+    # Sentence 1: DOG -> BITES -> MAN
+    s1_tokens = ["DOG", "BITES", "MAN"]
+    s2_tokens = ["MAN", "BITES", "DOG"]
+    
+    s1_x_offset = int(flip_cycle * 60)
+    for i, tok in enumerate(s1_tokens):
+        bx = cx - 220 + i * 220 + s1_x_offset
+        by = y_seq1
+        col = COLOR_SOLAR_AMBER if tok == "DOG" else COLOR_FOREST_SAGE
+        draw.rounded_rectangle([bx - 80, by - 35, bx + 80, by + 35], radius=10, fill=COLOR_BASALT_SLATE, outline=col, width=3)
+        draw.text((bx, by), tok, fill=COLOR_CRISP_WHITE, font=fonts["small"], anchor="mm")
+        # Position index tag
+        draw.text((bx, by - 55), f"pos: ?", fill=(160, 180, 200), font=fonts["mono_small"], anchor="mm")
+        
+    # Sentence 2: MAN -> BITES -> DOG
+    s2_x_offset = -int(flip_cycle * 60)
+    for i, tok in enumerate(s2_tokens):
+        bx = cx - 220 + i * 220 + s2_x_offset
+        by = y_seq2
+        col = COLOR_CORAL if tok == "MAN" else COLOR_FOREST_SAGE
+        draw.rounded_rectangle([bx - 80, by - 35, bx + 80, by + 35], radius=10, fill=COLOR_BASALT_SLATE, outline=col, width=3)
+        draw.text((bx, by), tok, fill=COLOR_CRISP_WHITE, font=fonts["small"], anchor="mm")
+        draw.text((bx, by + 55), f"pos: ?", fill=(160, 180, 200), font=fonts["mono_small"], anchor="mm")
+        
+    # Question mark energy rays between colliding concepts
+    draw.line([(cx, y_seq1 + 40), (cx, y_seq2 - 40)], fill=COLOR_CORAL, width=3)
+    draw.ellipse([cx - 20, cy - 20, cx + 20, cy + 20], fill=COLOR_PRUSSIAN_INK, outline=COLOR_WARM_CREAM, width=2)
+    draw.text((cx, cy), "≠", fill=COLOR_CORAL, font=fonts["header"], anchor="mm")
+
+def render_scene_conveyor_flow(draw, width, height, t, scene_meta, fonts):
+    """
+    SCENE: THE 3D ISOMETRIC CONVEYOR BELT / PARALLEL LUGGAGE TRACK
+    Represents the physical metaphor: 50 items dumped on a belt simultaneously.
+    """
+    drift_x, drift_y = draw_perspective_grid(draw, width, height, t, drift_speed=1.5)
     cx, cy = width // 2, 540
     
-    # 3D Conveyor Track
-    draw.polygon([(80, cy + 120), (width - 80, cy - 60), (width - 80, cy - 10), (80, cy + 170)],
-                 fill=(18, 26, 42), outline=COLOR_BASALT_SLATE)
-    draw.line([(80, cy + 120), (width - 80, cy - 60)], fill=COLOR_CYAN_GLOW, width=3)
-    draw.line([(80, cy + 170), (width - 80, cy - 10)], fill=COLOR_CYAN_GLOW, width=3)
+    title = scene_meta.get("title", "THE PARALLEL CONVEYOR")
+    subtitle = scene_meta.get("subtitle", "50 Tokens Loaded at the Same Exact Microsecond")
+    draw.text((width // 2, 170), title, fill=COLOR_CYAN_GLOW, font=fonts["header"], anchor="mm")
+    draw.text((width // 2, 220), subtitle, fill=COLOR_WARM_CREAM, font=fonts["subhead"], anchor="mm")
     
-    # Plated Output Word Pedestals moving along the line
-    output_tokens = ["The", "AI", "synthesizes", "coherent", "logic", "instantly"]
-    for i, tok in enumerate(output_tokens):
-        pos = (t * 0.35 + i * 0.16) % 1.0
-        px = int(120 + pos * (width - 240))
-        py = int((cy + 140) - pos * 180)
+    # 3D Conveyor Track (Left to Right isometric angle)
+    draw.polygon([(100, cy + 140), (width - 100, cy - 80), (width - 100, cy - 20), (100, cy + 200)],
+                 fill=(18, 28, 46), outline=COLOR_CYAN_GLOW, width=2)
+    # Rollers along the track
+    for r in range(12):
+        frac = r / 11.0
+        rx = int(100 + frac * (width - 200))
+        ry = int((cy + 140) - frac * 220)
+        draw.line([(rx, ry), (rx, ry + 60)], fill=(28, 44, 70), width=3)
         
-        # Pedestal disc
-        draw.ellipse([px - 45, py - 18, px + 45, py + 18], fill=COLOR_FOREST_SAGE, outline=COLOR_WARM_CREAM, width=2)
-        draw.text((px, py - 4), tok, fill=COLOR_CRISP_WHITE, font=fonts["small"], anchor="mm")
+    # Moving Token Packages / Luggage on Conveyor
+    tokens = ["Token_0", "Token_1", "Token_2", "Token_3", "Token_4", "Token_5"]
+    for i, tok in enumerate(tokens):
+        pos = (t * 0.4 + i * 0.18) % 1.0
+        px = int(140 + pos * (width - 280))
+        py = int((cy + 160) - pos * 230)
         
-    # High-Precision Robotic Plating Arm
-    arm_x = cx + int(60 * math.sin(t * 3.0))
-    arm_y = cy - 140
-    draw.line([(arm_x - 100, arm_y - 120), (arm_x, arm_y)], fill=COLOR_BASALT_SLATE, width=8)
-    draw.line([(arm_x, arm_y), (arm_x, arm_y + 110)], fill=COLOR_SOLAR_AMBER, width=6)
-    draw.ellipse([arm_x - 14, arm_y + 110 - 14, arm_x + 14, arm_y + 110 + 14], fill=COLOR_CORAL, outline=COLOR_CRISP_WHITE, width=2)
-    
-    # Active Plating Spark
-    if int(t * 4) % 2 == 0:
-        draw.line([(arm_x, arm_y + 110), (arm_x + 25, arm_y + 140)], fill=COLOR_WARM_CREAM, width=3)
-        draw.line([(arm_x, arm_y + 110), (arm_x - 25, arm_y + 140)], fill=COLOR_WARM_CREAM, width=3)
+        # Luggage / token block with 3D isometric sides
+        draw.polygon([(px - 45, py), (px, py - 22), (px + 45, py), (px, py + 22)],
+                     fill=COLOR_SOLAR_AMBER, outline=COLOR_WARM_CREAM, width=2)
+        draw.polygon([(px - 45, py), (px, py + 22), (px, py + 50), (px - 45, py + 28)],
+                     fill=(180, 90, 0), outline=COLOR_BASALT_SLATE)
+        draw.polygon([(px + 45, py), (px, py + 22), (px, py + 50), (px + 45, py + 28)],
+                     fill=(210, 110, 0), outline=COLOR_BASALT_SLATE)
+        draw.text((px, py), f"#{i}", fill=COLOR_BASALT_SLATE, font=fonts["small"], anchor="mm")
 
-def render_scene_4_cross_attention_fusion(draw, width, height, t, progress, fonts):
+def render_scene_harmonic_oscillator(draw, width, height, t, scene_meta, fonts):
     """
-    SCENE 4 (0:35 - 0:46): The Double Handshake (Cross-Attention Bridge)
-    Wide view showing the Encoder's Stock Pot on the left and Decoder Plating Station
-    on the right, connected by a high-voltage laser rail.
+    SCENE: HARMONIC WAVE FREQUENCY GENERATOR
+    Mathematical visualization of Sinusoidal Positional Encoding:
+    Real-time high-frequency Sine wave + low-frequency Cosine wave rippling
+    with laser stamping heads etching timecodes into passing tokens.
     """
-    draw.rectangle([0, 0, width, height], fill=COLOR_PRUSSIAN_INK)
+    drift_x, drift_y = draw_perspective_grid(draw, width, height, t, drift_speed=1.0)
+    cx = width // 2
     
-    draw.text((width // 2, 170), "CROSS-ATTENTION: THE DOUBLE HANDSHAKE", fill=COLOR_CORAL, font=fonts["header"], anchor="mm")
-    draw.text((width // 2, 215), "Before Placing Each Word, The Decoder Tastes The Stock Pot",
-              fill=COLOR_WARM_CREAM, font=fonts["subhead"], anchor="mm")
+    title = scene_meta.get("title", "HARMONIC FREQUENCY STAMP")
+    subtitle = scene_meta.get("subtitle", "Sine (High Freq) + Cosine (Low Freq) Harmonic Clocks")
+    draw.text((cx, 170), title, fill=COLOR_SOLAR_AMBER, font=fonts["header"], anchor="mm")
+    draw.text((cx, 220), subtitle, fill=COLOR_WARM_CREAM, font=fonts["subhead"], anchor="mm")
+    
+    # Formula HUD box
+    draw.rounded_rectangle([cx - 340, 260, cx + 340, 310], radius=8, fill=(14, 20, 32), outline=COLOR_FOREST_SAGE, width=2)
+    draw.text((cx, 285), "PE(pos, 2i) = sin(pos/10000^(2i/d))  |  PE(pos, 2i+1) = cos(pos/10000^(2i/d))",
+              fill=COLOR_FOREST_SAGE, font=fonts["mono_small"], anchor="mm")
               
-    left_x, left_y = 230, 520
-    right_x, right_y = width - 230, 520
+    sine_y_base = 450
+    cosine_y_base = 650
     
-    # Left: Encoder Pot
-    draw.ellipse([left_x - 110, left_y - 65, left_x + 110, left_y + 65], fill=(20, 36, 56), outline=COLOR_CYAN_GLOW, width=3)
-    draw.text((left_x, left_y), "ENCODER\n(ALL CONTEXT)", fill=COLOR_WARM_CREAM, font=fonts["small"], anchor="mm")
-    
-    # Right: Decoder Output
-    draw.ellipse([right_x - 110, right_y - 65, right_x + 110, right_y + 65], fill=(36, 26, 48), outline=COLOR_SOLAR_AMBER, width=3)
-    draw.text((right_x, right_y), "DECODER\n(NEW WORD)", fill=COLOR_WARM_CREAM, font=fonts["small"], anchor="mm")
-    
-    # Connecting High-Voltage Cross-Attention Laser Rails
-    rail_pulse = 0.5 + 0.5 * math.sin(t * 12.0)
-    rail_col = COLOR_SOLAR_AMBER if rail_pulse > 0.4 else COLOR_CORAL
-    draw.line([(left_x + 110, left_y), (right_x - 110, right_y)], fill=rail_col, width=6)
-    
-    # Traveling Tasting Particle Spoons
-    for pi in range(3):
-        particle_pos = (t * 2.0 + pi * 0.33) % 1.0
-        px = int((left_x + 110) + particle_pos * (right_x - left_x - 220))
-        py = int(left_y + 35 * math.sin(particle_pos * math.pi * 2))
-        draw.ellipse([px - 10, py - 10, px + 10, py + 10], fill=COLOR_CRISP_WHITE, outline=COLOR_SOLAR_AMBER, width=2)
+    # 1. High-Frequency Sine Wave (Solar Flare Amber #F77F00)
+    draw.text((100, sine_y_base - 55), "FAST CLOCK: HIGH-FREQ SINE (Seconds Gear)", fill=COLOR_SOLAR_AMBER, font=fonts["small"])
+    sine_points = []
+    for x in range(60, width - 60, 8):
+        y = sine_y_base + int(45 * math.sin((x * 0.02) - (t * 5.0)))
+        sine_points.append((x, y))
+    for i in range(len(sine_points) - 1):
+        draw.line([sine_points[i], sine_points[i+1]], fill=COLOR_SOLAR_AMBER, width=4)
         
-    # Central Cross-Attention Lock HUD
-    mid_x, mid_y = width // 2, 640
-    draw.rounded_rectangle([mid_x - 200, mid_y - 30, mid_x + 200, mid_y + 30],
+    # 2. Low-Frequency Cosine Wave (Cyan Glow #00D4FF)
+    draw.text((100, cosine_y_base - 55), "SLOW CLOCK: LOW-FREQ COSINE (Hours Gear)", fill=COLOR_CYAN_GLOW, font=fonts["small"])
+    cosine_points = []
+    for x in range(60, width - 60, 8):
+        y = cosine_y_base + int(55 * math.cos((x * 0.007) - (t * 2.0)))
+        cosine_points.append((x, y))
+    for i in range(len(cosine_points) - 1):
+        draw.line([cosine_points[i], cosine_points[i+1]], fill=COLOR_CYAN_GLOW, width=4)
+        
+    # Laser Stamping Heads tracking along the waves
+    for stamp_i in range(3):
+        stamp_x = int(240 + stamp_i * 300 + 40 * math.sin(t * 2.0 + stamp_i))
+        s_y = sine_y_base + int(45 * math.sin((stamp_x * 0.02) - (t * 5.0)))
+        c_y = cosine_y_base + int(55 * math.cos((stamp_x * 0.007) - (t * 2.0)))
+        
+        # Stamping beam
+        draw.line([(stamp_x, s_y), (stamp_x, c_y)], fill=COLOR_WARM_CREAM, width=2)
+        draw.ellipse([stamp_x - 8, s_y - 8, stamp_x + 8, s_y + 8], fill=COLOR_SOLAR_AMBER, outline=COLOR_CRISP_WHITE, width=2)
+        draw.ellipse([stamp_x - 8, c_y - 8, stamp_x + 8, c_y + 8], fill=COLOR_CYAN_GLOW, outline=COLOR_CRISP_WHITE, width=2)
+        
+        # Stamped token badge
+        badge_y = cosine_y_base + 95
+        draw.rounded_rectangle([stamp_x - 55, badge_y - 20, stamp_x + 55, badge_y + 20],
+                               radius=6, fill=COLOR_BASALT_SLATE, outline=COLOR_SOLAR_AMBER, width=2)
+        draw.text((stamp_x, badge_y), f"POS #{stamp_i}", fill=COLOR_WARM_CREAM, font=fonts["mono_small"], anchor="mm")
+
+def render_scene_vector_fusion(draw, width, height, t, scene_meta, fonts):
+    """
+    SCENE: VECTOR ADDITION CHAMBER
+    Shows Word Embedding Vector directly adding to the Positional Encoding Vector:
+    [Word Vector] + [Harmonic Wave Vector] = [Context-Aware Ordered Vector]
+    """
+    drift_x, drift_y = draw_perspective_grid(draw, width, height, t, drift_speed=1.5)
+    cx, cy = width // 2, 530
+    
+    title = scene_meta.get("title", "VECTOR ADDITION CHAMBER")
+    subtitle = scene_meta.get("subtitle", "Token Vector + Frequency Vector = Ordered Meaning")
+    draw.text((cx, 170), title, fill=COLOR_CORAL, font=fonts["header"], anchor="mm")
+    draw.text((cx, 220), subtitle, fill=COLOR_WARM_CREAM, font=fonts["subhead"], anchor="mm")
+    
+    # Left: Word Meaning Vector
+    left_x = cx - 260
+    draw.rounded_rectangle([left_x - 130, cy - 70, left_x + 130, cy + 70],
+                           radius=14, fill=(18, 28, 48), outline=COLOR_CYAN_GLOW, width=3)
+    draw.text((left_x, cy - 20), "WORD EMBEDDING", fill=COLOR_CYAN_GLOW, font=fonts["small"], anchor="mm")
+    draw.text((left_x, cy + 18), "[\"BIRYANI\": 512-dim]", fill=COLOR_WARM_CREAM, font=fonts["mono_small"], anchor="mm")
+    
+    # Plus Symbol
+    draw.ellipse([cx - 75, cy - 25, cx - 25, cy + 25], fill=COLOR_BASALT_SLATE, outline=COLOR_WARM_CREAM, width=2)
+    draw.text((cx - 50, cy), "+", fill=COLOR_WARM_CREAM, font=fonts["header"], anchor="mm")
+    
+    # Right: Positional Encoding Wave Vector
+    right_x = cx + 200
+    draw.rounded_rectangle([right_x - 130, cy - 70, right_x + 130, cy + 70],
+                           radius=14, fill=(38, 28, 20), outline=COLOR_SOLAR_AMBER, width=3)
+    draw.text((right_x, cy - 20), "POSITION VECTOR", fill=COLOR_SOLAR_AMBER, font=fonts["small"], anchor="mm")
+    draw.text((right_x, cy + 18), "[sin/cos: 512-dim]", fill=COLOR_WARM_CREAM, font=fonts["mono_small"], anchor="mm")
+    
+    # Fusion Beam down to the Final Ordered Output
+    arrow_y_start = cy + 90
+    arrow_y_end = cy + 180
+    draw.line([(cx, arrow_y_start), (cx, arrow_y_end)], fill=COLOR_WARM_CREAM, width=4)
+    
+    # Resulting Fused Vector Block
+    pulse_w = int(12 + 6 * math.sin(t * 8.0))
+    res_y = cy + 250
+    draw.rounded_rectangle([cx - 280, res_y - 50, cx + 280, res_y + 50],
+                           radius=16, fill=(14, 34, 28), outline=COLOR_FOREST_SAGE, width=3)
+    draw.text((cx, res_y - 15), "ORDERED FINAL EMBEDDING", fill=COLOR_FOREST_SAGE, font=fonts["small"], anchor="mm")
+    draw.text((cx, res_y + 18), "SAME 512-DIM VECTOR • ZERO LOST SLOTS", fill=COLOR_WARM_CREAM, font=fonts["mono_small"], anchor="mm")
+
+def render_scene_synchronized_lattice(draw, width, height, t, scene_meta, fonts):
+    """
+    SCENE: SYNCHRONIZED ARCHITECTURE LATTICE
+    The final resolution: Words in perfect sequential harmony with verified timecodes.
+    """
+    drift_x, drift_y = draw_perspective_grid(draw, width, height, t, drift_speed=1.0)
+    cx, cy = width // 2, 530
+    
+    title = scene_meta.get("title", "SYNCHRONIZED TIMELINE")
+    subtitle = scene_meta.get("subtitle", "100% Word Order Retention Across Hundreds of Layers")
+    draw.text((cx, 170), title, fill=COLOR_FOREST_SAGE, font=fonts["header"], anchor="mm")
+    draw.text((cx, 220), subtitle, fill=COLOR_WARM_CREAM, font=fonts["subhead"], anchor="mm")
+    
+    # Ordered Sequence Timeline Rails
+    tokens = ["Man", "bit", "the", "dog", "in", "the", "yard"]
+    for i, tok in enumerate(tokens):
+        x = 100 + i * 130
+        y = cy + int(35 * math.sin(t * 3.0 + i * 0.8))
+        
+        # Connecting timeline wire
+        if i < len(tokens) - 1:
+            next_x = 100 + (i + 1) * 130
+            next_y = cy + int(35 * math.sin(t * 3.0 + (i + 1) * 0.8))
+            draw.line([(x, y), (next_x, next_y)], fill=COLOR_FOREST_SAGE, width=3)
+            
+        # Token Node Box
+        draw.rounded_rectangle([x - 50, y - 35, x + 50, y + 35], radius=8,
+                               fill=COLOR_BASALT_SLATE, outline=COLOR_SOLAR_AMBER, width=2)
+        draw.text((x, y - 8), tok, fill=COLOR_CRISP_WHITE, font=fonts["small"], anchor="mm")
+        draw.text((x, y + 16), f"t={i}", fill=COLOR_FOREST_SAGE, font=fonts["mono_small"], anchor="mm")
+        
+    # Verified Lock Status
+    lock_y = cy + 180
+    draw.rounded_rectangle([cx - 240, lock_y - 25, cx + 240, lock_y + 25],
                            radius=12, fill=(16, 24, 38), outline=COLOR_FOREST_SAGE, width=2)
-    draw.text((mid_x, mid_y), "CONTEXT MATCH: 99.8% VERIFIED", fill=COLOR_FOREST_SAGE, font=fonts["small"], anchor="mm")
+    draw.text((cx, lock_y), "✓ SEQUENCE PRESERVED WITHOUT RECURSION", fill=COLOR_FOREST_SAGE, font=fonts["small"], anchor="mm")
 
-def render_scene_5_crystallized_transformer(draw, width, height, t, progress, fonts):
+def render_dynamic_frame(draw, width, height, t, progress, current_scene, fonts):
     """
-    SCENE 5 (0:46 - End): The Unified Transformer Engine
-    Dynamic slow cinematic pull-back showing the complete full-stack architecture
-    resonating as a unified thinking machine.
+    Dispatches frame rendering to the modular scene generator matching the scene storyboard.
     """
-    draw.rectangle([0, 0, width, height], fill=COLOR_PRUSSIAN_INK)
+    mode = current_scene.get("mode", "order_chaos")
     
-    draw.text((width // 2, 170), "THE TRANSFORMER ARCHITECTURE", fill=COLOR_WARM_CREAM, font=fonts["header"], anchor="mm")
-    draw.text((width // 2, 215), "The Kitchen Engine Behind All Modern Generative AI",
-              fill=COLOR_SOLAR_AMBER, font=fonts["subhead"], anchor="mm")
-              
-    cx, cy = width // 2, 540
-    
-    # Outer Rotating Holographic Rings
-    for ring_idx, (rx, ry, col) in enumerate([(380, 240, COLOR_FOREST_SAGE),
-                                              (300, 180, COLOR_CYAN_GLOW),
-                                              (220, 130, COLOR_SOLAR_AMBER)]):
-        angle = t * 0.6 * (1 if ring_idx % 2 == 0 else -1)
-        draw.ellipse([cx - rx, cy - ry, cx + rx, cy + ry], outline=col, width=2)
-        
-    # Glowing Fusion Core
-    pulse_size = int(60 + 12 * math.sin(t * 6.0))
-    draw.ellipse([cx - pulse_size, cy - pulse_size, cx + pulse_size, cy + pulse_size],
-                 fill=COLOR_WARM_CREAM, outline=COLOR_CRISP_WHITE, width=4)
-    draw.text((cx, cy), "TRANSFORMER\nFUSION", fill=COLOR_BASALT_SLATE, font=fonts["mono_small"], anchor="mm")
+    if mode == "order_chaos":
+        render_scene_order_chaos(draw, width, height, t, current_scene, fonts)
+    elif mode == "conveyor_flow":
+        render_scene_conveyor_flow(draw, width, height, t, current_scene, fonts)
+    elif mode == "harmonic_oscillator":
+        render_scene_harmonic_oscillator(draw, width, height, t, current_scene, fonts)
+    elif mode in ["vector_stamp", "vector_fusion"]:
+        render_scene_vector_fusion(draw, width, height, t, current_scene, fonts)
+    elif mode in ["synchronized_lattice", "final_resolution"]:
+        render_scene_synchronized_lattice(draw, width, height, t, current_scene, fonts)
+    else:
+        # Graceful fallback to harmonic oscillator
+        render_scene_harmonic_oscillator(draw, width, height, t, current_scene, fonts)
 
-def render_motion_video(episode_num, topic, audio_path, output_mp4_path, script_text=""):
-    duration = get_audio_duration(audio_path)
+def render_dynamic_video(storyboard, script_text, audio_path, output_mp4_path, episode_title="Kissa-e-Machine"):
+    """
+    Master video rendering engine:
+    - Renders 1080x1920 vertical format.
+    - Dynamically swaps 4-5 procedural scene visuals mapped to storyboard timestamps.
+    - Centers dynamic burned-in subtitles strictly in the safe lower-middle zone (Y: 55-62%).
+    - Highlights the currently spoken word in Solar Flare Amber (#F77F00).
+    - Muxes cleanly with the voiceover MP3 using FFmpeg.
+    """
+    width = 1080
+    height = 1920
     fps = 24
+    
+    duration = get_audio_duration(audio_path)
+    if duration <= 5.0:
+        duration = 50.0
     total_frames = int(duration * fps)
-    width, height = 1080, 1920
+    print(f"[VideoEngine] Rendering {total_frames} frames ({duration:.2f}s) at {fps} FPS (1080x1920)...")
     
     captions = build_caption_timeline(script_text, duration)
-    temp_raw_avi = output_mp4_path.replace(".mp4", "_raw.avi")
-    fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+    fonts = get_fonts()
+    
+    # Subtitle safe zone: Y 55% - 62% (for 1920 height, ~1060 to 1190)
+    caption_box_y = int(height * 0.58)
+    
+    # Prepare scenes with normalized timings
+    scenes = storyboard if storyboard and len(storyboard) > 0 else [
+        {"mode": "order_chaos", "title": "THE BAG OF WORDS TRAP", "subtitle": "Math Has Zero Concept of Time or Order", "start_sec": 0.0, "end_sec": 12.0},
+        {"mode": "conveyor_flow", "title": "THE PARALLEL CONVEYOR", "subtitle": "50 Tokens Loaded at the Same Exact Microsecond", "start_sec": 12.0, "end_sec": 24.0},
+        {"mode": "harmonic_oscillator", "title": "HARMONIC FREQUENCY STAMP", "subtitle": "Sine (High Freq) + Cosine (Low Freq) Harmonic Clocks", "start_sec": 24.0, "end_sec": 38.0},
+        {"mode": "vector_fusion", "title": "VECTOR ADDITION CHAMBER", "subtitle": "Token Vector + Frequency Vector = Ordered Meaning", "start_sec": 38.0, "end_sec": duration}
+    ]
+    
+    temp_raw_avi = output_mp4_path + ".temp.avi"
+    fourcc = cv2.VideoWriter_fourcc(*'MJPG')
     out = cv2.VideoWriter(temp_raw_avi, fourcc, fps, (width, height))
     
-    # Fonts
-    font_bold_path = r"C:\Windows\Fonts\arialbd.ttf"
-    linux_fonts = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf"
-    ]
-    font_target = font_bold_path if os.path.exists(font_bold_path) else next((p for p in linux_fonts if os.path.exists(p)), None)
-    
-    try:
-        fonts = {
-            "header": ImageFont.truetype(font_target, 40) if font_target else ImageFont.load_default(),
-            "subhead": ImageFont.truetype(font_target, 26) if font_target else ImageFont.load_default(),
-            "small": ImageFont.truetype(font_target, 22) if font_target else ImageFont.load_default(),
-            "mono_small": ImageFont.truetype(font_target, 18) if font_target else ImageFont.load_default(),
-            # Subtitle font: Montserrat Black / Arial Bold (Size 58)
-            "caption": ImageFont.truetype(font_target, 58) if font_target else ImageFont.load_default(),
-            "badge": ImageFont.truetype(font_target, 26) if font_target else ImageFont.load_default(),
-            "time": ImageFont.truetype(font_target, 24) if font_target else ImageFont.load_default()
-        }
-    except:
-        default_f = ImageFont.load_default()
-        fonts = {k: default_f for k in ["header", "subhead", "small", "mono_small", "caption", "badge", "time"]}
-        
-    # 5 Sequential Scene Shifts (every ~10-12s, dynamic multi-scene compositing)
-    s1_end = min(10.0, duration * 0.20)
-    s2_end = min(22.0, duration * 0.44)
-    s3_end = min(35.0, duration * 0.70)
-    s4_end = min(46.0, duration * 0.90)
-    
-    print(f"[VideoEngine] Rendering Dynamic 5-Scene Video for EP_{episode_num} ({total_frames} frames, {duration:.1f}s)...")
-    
-    for f in range(total_frames):
-        t = f / fps
-        progress = t / duration
+    for frame_idx in range(total_frames):
+        t = frame_idx / fps
+        progress = frame_idx / total_frames
         
         img = Image.new("RGB", (width, height), COLOR_PRUSSIAN_INK)
         draw = ImageDraw.Draw(img)
         
-        # 1. Topic-Driven Dynamic Scene Rendering
-        if t < s1_end:
-            render_scene_1_token_overload(draw, width, height, t, progress, fonts)
-        elif t < s2_end:
-            render_scene_2_encoder_chamber(draw, width, height, t, progress, fonts)
-        elif t < s3_end:
-            render_scene_3_decoder_station(draw, width, height, t, progress, fonts)
-        elif t < s4_end:
-            render_scene_4_cross_attention_fusion(draw, width, height, t, progress, fonts)
-        else:
-            render_scene_5_crystallized_transformer(draw, width, height, t, progress, fonts)
-            
-        # 2. Header Section (Episode Badge)
-        draw.rectangle([50, 55, 480, 110], fill=COLOR_BASALT_SLATE, outline=COLOR_SOLAR_AMBER, width=2)
-        draw.text((70, 70), f"KISSA-E-MACHINE • EP {episode_num}", fill=COLOR_WARM_CREAM, font=fonts["badge"])
+        # 1. Determine active scene
+        active_scene = scenes[-1]
+        for s in scenes:
+            if s.get("start_sec", 0.0) <= t < s.get("end_sec", duration):
+                active_scene = s
+                break
+                
+        # 2. Render dynamic procedural scene visual
+        render_dynamic_frame(draw, width, height, t, progress, active_scene, fonts)
         
-        # 3. Dynamic Word-Level Subtitles in Safe Zone (Y: 52% - 60% -> Y = 1040 - 1150)
-        caption_box_y = 1050
+        # 3. Dynamic Burned-In Subtitles (Lower-Middle Safe Zone: Y 55-62%)
         active_chunk = None
         for c in captions:
             if c["start"] <= t <= c["end"]:
@@ -347,9 +434,9 @@ def render_motion_video(episode_num, topic, audio_path, output_mp4_path, script_
             total_w = sum(word_widths) + space_w * (len(c_words) - 1)
             start_x = (width - total_w) // 2
             
-            # Contrast rounded glass pill backdrop
-            pill_pad_x = 24
-            pill_pad_y = 14
+            # Rounded glass contrast backdrop pill
+            pill_pad_x = 26
+            pill_pad_y = 16
             draw.rounded_rectangle([start_x - pill_pad_x, caption_box_y - pill_pad_y,
                                     start_x + total_w + pill_pad_x, caption_box_y + 75],
                                    radius=16, fill=(10, 16, 26, 220), outline=(28, 40, 60), width=1)
@@ -360,15 +447,17 @@ def render_motion_video(episode_num, topic, audio_path, output_mp4_path, script_
                 w_end = active_chunk["word_ends"][i]
                 is_active_word = (w_start <= t <= w_end)
                 
-                # Active word highlighted in Solar Flare Amber (#F77F00), rest Warm Cream / Crisp White
+                # Active word in Solar Flare Amber (#F77F00), rest in Warm Cream / Crisp White
                 word_fill = COLOR_SOLAR_AMBER if is_active_word else COLOR_WARM_CREAM
                 
-                # 3.5px solid dark outline (#161B22) for razor-sharp readability across screens
+                # 3.5px solid dark outline (#161B22) for high-contrast legibility across devices
                 draw.text((cur_x, caption_box_y), w, font=fonts["caption"], fill=word_fill,
                           stroke_width=4, stroke_fill=COLOR_DARK_SHADOW)
                 cur_x += word_widths[i] + space_w
                 
-        # 4. Clean Minimal Footer
+        # 4. Minimalist Header & Footer Telemetry
+        draw.text((60, 60), f"KISSA-E-MACHINE • {episode_title.upper()}", fill=(140, 160, 185), font=fonts["mono_small"])
+        
         sec_current = int(t)
         sec_total = int(duration)
         timestamp_str = f"{sec_current // 60}:{sec_current % 60:02d} / {sec_total // 60}:{sec_total % 60:02d}"
@@ -403,3 +492,7 @@ def render_motion_video(episode_num, topic, audio_path, output_mp4_path, script_
         
     print(f"[VideoEngine] Final video master ready: {output_mp4_path}")
     return output_mp4_path
+
+# Backward compatibility alias
+def render_motion_video(episode_num, topic, audio_path, output_mp4_path, script_text=""):
+    return render_dynamic_video(None, script_text, audio_path, output_mp4_path, episode_title=f"EP_{episode_num}: {topic}")

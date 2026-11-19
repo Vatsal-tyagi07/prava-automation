@@ -1,0 +1,30 @@
+[
+  {
+    "mode": "order_chaos",
+    "title": "The Parallel Processing Paradox",
+    "subtitle": "Words 'Dog', 'Bites', and 'Man' colliding in a non-linear void without sequence",
+    "start_sec": 0.0,
+    "end_sec": 5.0
+  },
+  {
+    "mode": "conveyor_flow",
+    "title": "The Luggage Carousel Chaos",
+    "subtitle": "Identical suitcases dropping simultaneously onto a high-speed belt without identification tags",
+    "start_sec": 5.0,
+    "end_sec": 12.0
+  },
+  {
+    "mode": "harmonic_oscillator",
+    "title": "The Sine-Cosine Clockwork",
+    "subtitle": "Mechanical gears driving wave oscillators to stamp frequency barcodes onto word packets",
+    "start_sec": 12.0,
+    "end_sec": 20.0
+  },
+  {
+    "mode": "vector_fusion",
+    "title": "Spatial Vector Tilting",
+    "subtitle": "3D word vectors rotating to specific angular offsets to encode their temporal position",
+    "start_sec": 20.0,
+    "end_sec": 28.0
+  }
+]
