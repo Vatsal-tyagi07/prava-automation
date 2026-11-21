@@ -25,8 +25,9 @@ def clean_script_for_tts(raw_text):
     elif "## 1. SPOKEN SCRIPT" in text:
         text = text.split("## 1. SPOKEN SCRIPT")[1].split("## 2.")[0]
         
-    # Strip bracketed cues like [0:00 - 0:02 | Hook: ...]
+    # Strip bracketed cues like [0:00 - 0:02 | Hook: ...] and parenthetical notes
     text = re.sub(r"\[.*?\]", "", text)
+    text = re.sub(r"\(.*?\)", "", text)
     # Strip markdown headers, asterisks, bullets
     text = re.sub(r"#+\s*", "", text)
     text = re.sub(r"\*\*|\*", "", text)
@@ -104,9 +105,9 @@ def synthesize_with_gemini_tts(text, output_mp3_path, voice_name="Aoede"):
             
     return False
 
-async def synthesize_fallback_edge_tts(text, output_mp3_path, voice="hi-IN-MadhurNeural"):
+async def synthesize_fallback_edge_tts(text, output_mp3_path, voice="hi-IN-SwaraNeural"):
     """
-    Natural conversational Hinglish voiceover via Edge-TTS (hi-IN-MadhurNeural or hi-IN-SwaraNeural).
+    Natural, expressive conversational Hinglish voiceover via Edge-TTS (hi-IN-SwaraNeural).
     """
     print(f"[TTS] Synthesizing conversational voiceover with Edge-TTS ({voice})...")
     communicate = edge_tts.Communicate(text, voice, rate="+2%", pitch="-1Hz")
@@ -114,29 +115,31 @@ async def synthesize_fallback_edge_tts(text, output_mp3_path, voice="hi-IN-Madhu
     print(f"[TTS] Edge-TTS voiceover saved to: {output_mp3_path}")
     return True
 
-def generate_voiceover(raw_text, output_mp3_path, voice_name="Aoede"):
+def generate_voiceover(raw_text, output_mp3_path, voice_name="hi-IN-SwaraNeural"):
     clean_text = clean_script_for_tts(raw_text)
     print(f"[TTS] Cleaned spoken narration length: {len(clean_text)} characters.")
     
-    # 1. Try Gemini HD Studio Voice first
+    # 1. Try Gemini HD Studio Voice first (if available and mapped)
     success = False
     if API_KEY:
-        success = synthesize_with_gemini_tts(clean_text, output_mp3_path, voice_name=voice_name)
+        gemini_voice = "Aoede" if voice_name in ["hi-IN-SwaraNeural", "Aoede"] else voice_name
+        success = synthesize_with_gemini_tts(clean_text, output_mp3_path, voice_name=gemini_voice)
         
-    # 2. High-fidelity Hinglish conversational fallback
+    # 2. High-fidelity Hinglish conversational female voice (Edge-TTS hi-IN-SwaraNeural)
     if not success:
-        print("[TTS] Falling back to conversational Hinglish voice (hi-IN-MadhurNeural)...")
+        target_voice = voice_name if (voice_name.startswith("hi-") or voice_name.startswith("en-")) else "hi-IN-SwaraNeural"
+        print(f"[TTS] Synthesizing natural expressive female Hinglish voice ({target_voice})...")
         try:
-            asyncio.run(synthesize_fallback_edge_tts(clean_text, output_mp3_path, voice="hi-IN-MadhurNeural"))
+            asyncio.run(synthesize_fallback_edge_tts(clean_text, output_mp3_path, voice=target_voice))
             success = True
         except Exception as e:
-            print(f"[TTS] Edge-TTS Madhur failed: {e}. Trying SwaraNeural...")
+            print(f"[TTS] Edge-TTS {target_voice} failed: {e}. Trying hi-IN-SwaraNeural...")
             try:
                 asyncio.run(synthesize_fallback_edge_tts(clean_text, output_mp3_path, voice="hi-IN-SwaraNeural"))
                 success = True
             except Exception as e2:
-                print(f"[TTS] Edge-TTS Swara failed: {e2}. Trying en-IN-PrabhatNeural...")
-                asyncio.run(synthesize_fallback_edge_tts(clean_text, output_mp3_path, voice="en-IN-PrabhatNeural"))
+                print(f"[TTS] Edge-TTS Swara failed: {e2}. Trying en-IN-NeerjaNeural...")
+                asyncio.run(synthesize_fallback_edge_tts(clean_text, output_mp3_path, voice="en-IN-NeerjaNeural"))
                 success = True
                 
     return clean_text

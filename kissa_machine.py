@@ -21,7 +21,15 @@ SEQUENTIAL_TOPICS = {
     24: "Multi-Head Attention (Parallel Perspectives)",
     25: "The Transformer Architecture (Encoder-Decoder Fusion)",
     26: "Positional Encoding (Teaching Math the Order of Words)",
-    27: "Feed-Forward Layers & Long-Term Memory Storage"
+    27: "Feed-Forward Layers & Long-Term Memory Storage",
+    28: "Layer Normalization & Residual Connections (Preventing Gradient Vanishing)",
+    29: "Softmax & Temperature in LLMs (Controlling Creativity vs Precision)",
+    30: "Byte Pair Encoding & Tokenization (How Models Read Raw Text)",
+    31: "KV Cache Optimization (Why Inference Speed Drops Over Long Chats)",
+    32: "Rotary Position Embeddings / RoPE (Relative Geometry in Modern LLMs)",
+    33: "Mixture of Experts / MoE (Activating Only Sparse Brain Sectors)",
+    34: "RLHF & DPO (Aligning Raw Probability with Human Intent)",
+    35: "Quantization & FP8/INT4 (Running Trillion-Parameter Models on Edge)"
 }
 
 # Master Anti-Repetition Registry: Blacklists tropes used in earlier runs
@@ -31,7 +39,10 @@ PAST_METAPHORS_BLACKLIST = [
     "Cricket / sports broadcast 8-camera crew / bowler wrist spin",
     "2-star Michelin kitchen relay / prep sous-chef / plating chef",
     "Detective clue board / red yarn on corkboard",
-    "Static radial geometric webs / circular star nodes"
+    "Static radial geometric webs / circular star nodes",
+    "Airport luggage carousel / baggage conveyor belt",
+    "Traffic police / traffic intersection signal",
+    "Library card catalog / librarian with flashlight"
 ]
 
 def load_pipeline_state():
@@ -53,115 +64,128 @@ def save_pipeline_state(state):
     with open(PIPELINE_STATE_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
 
-def generate_stage_1_script(episode_num, topic, past_analogies=None):
+def sanitize_narration(text):
     """
-    STAGE 1: SCRIPT GENERATION (Context-Aware but Zero Callbacks)
-    - 100% Standalone: Zero callbacks ("Yesterday we learned...", "In the last part...").
-    - Natural colloquial street Hinglish over chai.
-    - Fresh physical analogy strictly blacklisting past tropes.
-    - Structure: 0-3s high-tension hook -> 4-20s fresh analogy -> 21-40s mechanical trick -> 41-55s takeaway.
+    Guarantees pure plain text narration:
+    Strips markdown, asterisks, headers, stage directions, and bracketed cues.
     """
-    blacklist_str = "\n".join(f"- {b}" for b in (past_analogies or PAST_METAPHORS_BLACKLIST))
-    
-    system_instruction = (
-        "You are the lead creator and creative director of 'Kissa-e-Machine'. "
-        "Your voice: high-retention, peer-to-peer developer voice (like two senior engineers talking over Chai). "
-        "STRICT CARDINAL RULES FOR SCRIPTING:\n"
-        "1. ZERO SERIALIZATION: Strictly ban callbacks ('Yesterday we saw...', 'In the previous episode...', 'Continuing our series...'). Every reel must be a 100% self-contained standalone asset for a cold viewer.\n"
-        "2. HOOK (0–3s): Fast-paced, problem-first Hinglish placing the developer or machine in tension. Banned openers: 'Ever wondered...', 'What is...', 'Today we will learn...'. Example: 'Agar aap AI ko bolo \"Dog bites man\", aur agle second \"Man bites dog\"—toh Transformer ke liye yeh dono bilkul same hain!'\n"
-        "3. TONE & JARGON: Zero sterile textbook math/CS terms without an immediate punchline. Relatable, energetic, intellectual.\n"
-        "4. FRESH METAPHOR ENGINE: You must NOT use any of these blacklisted analogies:\n"
-        f"{blacklist_str}\n"
-        "Invent an entirely new, grounded physical metaphor (e.g. airport luggage carousel with barcode frequency stamps, mechanical music box clockwork, train dispatch signaling yard).\n"
-        "5. SHARE TRIGGER (Seconds 15–35): Feature at least one counter-intuitive mental model tailored for WhatsApp/Discord sharing.\n"
-        "6. BRAND PRONUNCIATION: Always write 'Prah-va' so speech engines never mispronounce it as 'Brava'.\n"
-        "7. RUNTIME: 45 to 55 seconds spoken delivery (~115-135 words)."
-    )
-    
-    prompt = f"""
-Create the complete production script for Episode {episode_num} of "KISSA-E-MACHINE".
-TOPIC: "{topic}"
-
-SCRIPT BREAKDOWN:
-- 0:00 - 0:03 | Hook: Problem-first tension in street Hinglish (Why order is invisible to parallel math).
-- 0:04 - 0:20 | Fresh Analogy: The physical metaphor unpacking why simultaneous processing is time-blind.
-- 0:21 - 0:40 | The Mechanical Trick: How sinusoidal waves (sine & cosine frequencies) act as an oscillating clock stamped onto word vectors without increasing vector size.
-- 0:41 - 0:52 | Developer Takeaway + Outro: "Follow Prah-va, and keep questioning the machine."
-
-Output format:
-## 1. SPOKEN SCRIPT & DELIVERY CUES
-[0:00 - 0:03 | Hook: ...]
-(lines with cues)
-
-## 2. MASTER VIDEO EDITING BLUEPRINT
-(Kurzgesagt flat vector design cues)
-
-## 3. CLEAN SPOKEN NARRATION
-(Pure spoken Hinglish words only, no timestamps, no brackets)
-"""
-    response_text = gemini_service.generate_text(prompt, system_instruction, temperature=0.7)
-    
-    # Check for banned serial callbacks
-    banned_callbacks = ["yesterday we", "in the last episode", "previously on", "in our last video", "continuing from"]
-    if response_text and any(bc in response_text.lower() for bc in banned_callbacks):
-        print("[KissaMachine] Generated text contained serial callbacks. Enforcing standalone script.")
-        response_text = None
-        
-    if not response_text:
-        response_text = get_locked_standalone_script(episode_num, topic)
-        
-    return response_text
+    if not text:
+        return ""
+    # Strip markdown headers (e.g. #, ## 1. etc)
+    text = re.sub(r"#+\s*.*?\n", "\n", text)
+    # Strip bracketed cues, timestamps, or stage directions e.g. [0:00 - 0:03], [Smiling], [Cut to...]
+    text = re.sub(r"\[.*?\]", "", text)
+    text = re.sub(r"\(.*?\)", "", text)
+    # Strip markdown bold/italic/code syntax
+    text = re.sub(r"\*\*|\*", "", text)
+    text = re.sub(r"__|_", "", text)
+    text = re.sub(r"`.*?`", "", text)
+    # Strip bullet marks or list numbering
+    text = re.sub(r"^\s*[-*•\d\.]+\s*", "", text, flags=re.MULTILINE)
+    # Normalize brand pronunciation
+    text = re.sub(r"\bPrava\b", "Prah-va", text)
+    text = re.sub(r"\bprava\b", "prah-va", text)
+    # Clean whitespace and punctuation
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    cleaned = " ".join(lines)
+    cleaned = re.sub(r"\s+([.,!?;:])", r"\1", cleaned)
+    cleaned = re.sub(r"([.,!?;:])\s*", r"\1 ", cleaned).strip()
+    return cleaned
 
 def get_locked_standalone_script(episode_num, topic):
     """
-    Handcrafted master standalone script for Episode 26 enforcing 100% of directives:
-    - Zero callbacks
-    - Problem-first street Hinglish hook
-    - Fresh physical analogy: Airport luggage carousel with harmonic frequency barcode stamps
-    - Sinusoidal wave clockwork explanation
-    - Clean Prah-va pronunciation
+    Dynamic fallback narration script tailored to the requested topic.
+    Guarantees 100% plain text narration, conversational Hinglish, zero markdown,
+    zero bracketed cues, and authentic peer-to-peer chai-time tone.
     """
-    return f"""# EPISODE {episode_num}: {topic}
+    topic_clean = topic.split("(")[0].strip()
+    return (
+        f"Kabhi socha hai ki jab ek AI model {topic_clean} execute karta hai, toh background mein actual mein kya ho raha hota hai? "
+        f"Textbook math isko bohot complex banati hai, lekin simple shabdon mein samjho toh yeh poora khel ek smart filter jaisa hai. "
+        f"Socho jaise ek busy railway dispatch room jahan hazaron trains ek saath track par aati hain. "
+        f"Bina kisi delay ke har token ko exact direction aur mathematical weight diya jata hai taaki context kabhi lost na ho. "
+        f"Yeh choti si architectural trick pure inference ko super fast aur reliable bana deti hai. "
+        f"Follow Prah-va, and keep questioning the machine."
+    )
 
-## 1. SPOKEN SCRIPT & DELIVERY CUES
-[0:00 - 0:03 | Hook: Intense direct eye contact, sharp incredulous tone]
-Agar aap AI ko bolo "Dog bites man", aur agle second "Man bites dog"... toh Transformer ke liye yeh dono sentences bilkul same hain!
+def generate_stage_1_script(episode_num, topic, past_analogies=None):
+    """
+    STAGE 1: SCRIPT GENERATION (Fresh, Conversational, Non-Repetitive)
+    - 100% Standalone: Zero callbacks ("Yesterday we learned...", "In the previous episode...").
+    - Authentic, conversational Hinglish (Roman script, everyday spoken Hindi mixed naturally with English tech terms).
+    - Tone: Intriguing, natural peer-to-peer explanation (like discussing an AI topic over chai).
+    - Eliminate robotic documentary phrasing and repetitive intros ("Kya aapko pata hai?").
+    - Output: Plain text narration only—no markdown, asterisks (**), stage directions, or bracketed cues.
+    - Set LLM temperature to 0.8 and pass a dynamic seed (e.g. current date/timestamp) so output varies daily.
+    """
+    now = datetime.now()
+    dynamic_seed = int(now.timestamp()) % 2147483647
+    date_str = now.strftime("%Y-%m-%d %H:%M:%S")
 
-[0:03 - 0:06 | Knowing lean-in, wry developer smile]
-Kyunki matrix math ek timeless calculator hai. Usse time aur order ka ratti bhar bhi idea nahi hota.
+    # Dynamic anti-repetition blacklist from past episodes and history
+    state = load_pipeline_state()
+    history_blacklist = []
+    for item in state.get("history", []):
+        if item.get("analogy_used"):
+            history_blacklist.append(item["analogy_used"])
+        if item.get("topic"):
+            history_blacklist.append(f"Previous topic: {item['topic']}")
+            
+    combined_blacklist = list(set(PAST_METAPHORS_BLACKLIST + history_blacklist + (past_analogies or [])))
+    blacklist_str = "\n".join(f"- {b}" for b in combined_blacklist)
 
-[0:06 - 0:18 | Expansive hand gesture, tracking an invisible conveyor]
-Imagine karo ek hyper-speed airport luggage belt. Pachaas bags ek saath machine par phenk diye gaye. Sab suitcases ek microsecond mein process ho rahe hain, par machine ko yeh pata hi nahi ki counter par pehle kaunsa bag rakha gaya tha!
+    system_instruction = (
+        "You are the creator and voice of 'Kissa-e-Machine'—an engaging tech reel series explaining core AI architecture breakthroughs.\n\n"
+        "CORE VOICE & TONE:\n"
+        "- Voice: Intriguing, energetic, natural peer-to-peer explanation—like two senior engineers discussing deep AI internals over chai.\n"
+        "- Language: Authentic, conversational Hinglish written purely in Roman script (everyday spoken Hindi naturally interwoven with English tech terms like 'weights', 'loss function', 'attention', 'tokens', 'vectors', 'layers', 'cache', 'GPU', 'parameters').\n"
+        "- STRICTLY NO Devanagari script. Use Roman letters only.\n\n"
+        "STRICT CARDINAL RULES:\n"
+        "1. BAN CLICHÉ REPETITIVE INTROS: Never start with 'Kya aapko pata hai?', 'Ever wondered?', 'Dosto...', 'Aaj hum baat karenge...', or 'Have you ever noticed...'. Start directly with an intriguing problem, engineering paradox, or sharp question.\n"
+        "2. ELIMINATE DOCUMENTARY PHRASING: Strictly ban sterile, robotic documentary lines (e.g. 'In the vast realm of computing', 'Let us examine how the system computes', 'It is fascinating to observe'). Speak with casual authority and relatable punchlines (e.g., 'socho agar...', 'par asli twist yeh hai...', 'simple shabdon mein...', 'asli game yahan shuru hota hai').\n"
+        "3. ZERO SERIALIZATION: Strictly ban all episode callbacks ('Yesterday we learned...', 'In our previous episode...', 'Kal humne dekha tha...', 'Continuing our journey...'). Every episode must be 100% self-contained for a first-time viewer.\n"
+        "4. ANTI-REPETITION METAPHOR ENGINE: You must NOT use any of these blacklisted analogies:\n"
+        f"{blacklist_str}\n"
+        "For every run, invent a brand-new, vivid, physical real-world metaphor (e.g. soundboard audio mixer, subway track switching, fast-food assembly line, mechanical typewriter hammer, pocket radio tuning) to explain how the AI mechanism works.\n"
+        "5. PLAIN TEXT NARRATION ONLY: Output strictly pure spoken voiceover narration in plain text. Absolutely NO markdown headers (# or ##), no asterisks (**), no bold/italic markers, no stage directions, no camera angles, no delivery cues, and no bracketed timestamps ([0:00 - 0:03]). Do not include greetings or intro/outro meta text like 'Here is your script:'.\n"
+        "6. BRAND PRONUNCIATION & SIGN-OFF: Always write the brand phonetically as 'Prah-va' so speech synthesis engines pronounce it accurately. Always finish the narration with the exact sign-off line: 'Follow Prah-va, and keep questioning the machine.'\n"
+        "7. DURATION: Spoken duration of 45 to 55 seconds (~115 to 135 words)."
+    )
 
-[0:18 - 0:28 | Precise counting gesture, sharp intellectual clarity]
-Toh engineers ne recursive loops nahi lagaye... unhone lagaya ek harmonic time stamp! Har word ke vector par ek oscillating sound wave chipka di.
+    prompt = f"""
+Create an original, fresh narration script for Episode {episode_num} of "Kissa-e-Machine".
+Topic: "{topic}"
+Run Date/Time: {date_str} (Dynamic Seed: {dynamic_seed})
 
-[0:28 - 0:38 | Tracing waves in the air, visual rhythm]
-Fast sine wave seconds ka gear ban gayi, aur slow cosine wave ghanton ka gear. Har position ka ek unique geometric fingerprint ban gaya!
+Narrative Structure:
+1. Hook (First 1-2 sentences): A gripping, problem-first statement or paradox in street Hinglish that exposes a technical puzzle about "{topic}".
+2. Fresh Analogy (Next 2-3 sentences): A brand-new, intuitive physical metaphor (avoiding all blacklisted analogies) that makes the concept click instantly.
+3. The Engineering Insight (Next 2-3 sentences): How modern AI architectures actually solve this problem with elegance.
+4. Takeaway & Outro: A sharp one-liner takeaway followed by "Follow Prah-va, and keep questioning the machine."
 
-[0:38 - 0:47 | Punchy realization, open palms]
-Bina sentence ko slow kiye, math ko sequence samajh aa gaya. Words parallel bhi rahe, aur order bhi zinda raha.
-
-[0:47 - 0:52 | Confident signature nod, crisp delivery]
-Next time, dekhenge ki yeh model real-world facts kahan store karta hai. Follow Prah-va, and keep questioning the machine.
-
-## 2. MASTER VIDEO EDITING BLUEPRINT
-### Visual Style: Kurzgesagt / Vox High-Precision Scientific Flat Motion Design
-- Dynamic Palette:
-  * Prussian Ink (#0B192C) - Deep void backdrop
-  * Basalt Slate (#161B22) - Mechanical tracks & coordinate planes
-  * Solar Flare Amber (#F77F00) - High-frequency Sine clock gear & active highlights
-  * Cyan Glow (#00D4FF) - Low-frequency Cosine clock gear & scanning lasers
-  * Forest Sage (#2A9D8F) - Verified order timestamps & locked positions
-  * Warm Cream (#FDF0D5) - Formula HUD & typography
-- Scene 1: Order Chaos - "Dog Bites Man" colliding with "Man Bites Dog", collision alert HUD.
-- Scene 2: 3D Conveyor Track - Luggage packages streaming in parallel.
-- Scene 3: Harmonic Oscillator - Sine wave (amber) and Cosine wave (cyan) actively stamping tokens.
-- Scene 4: Vector Addition Chamber - [Word Embedding] + [Wave Vector] = Ordered Embedding.
-
-## 3. CLEAN SPOKEN NARRATION
-Agar aap AI ko bolo "Dog bites man", aur agle second "Man bites dog"... toh Transformer ke liye yeh dono sentences bilkul same hain! Kyunki matrix math ek timeless calculator hai. Usse time aur order ka ratti bhar bhi idea nahi hota. Imagine karo ek hyper-speed airport luggage belt. Pachaas bags ek saath machine par phenk diye gaye. Sab suitcases ek microsecond mein process ho rahe hain, par machine ko yeh pata hi nahi ki counter par pehle kaunsa bag rakha gaya tha! Toh engineers ne recursive loops nahi lagaye... unhone lagaya ek harmonic time stamp! Har word ke vector par ek oscillating sound wave chipka di. Fast sine wave seconds ka gear ban gayi, aur slow cosine wave ghanton ka gear. Har position ka ek unique geometric fingerprint ban gaya! Bina sentence ko slow kiye, math ko sequence samajh aa gaya. Words parallel bhi rahe, aur order bhi zinda raha. Next time, dekhenge ki yeh model real-world facts kahan store karta hai. Follow Prah-va, and keep questioning the machine.
+OUTPUT REQUIREMENT:
+Provide plain text narration only. No markdown, no asterisks, no stage directions, no bracketed cues.
 """
+
+    response_text = gemini_service.generate_text(
+        prompt,
+        system_instruction,
+        temperature=0.8,
+        seed=dynamic_seed
+    )
+
+    # Check for banned serial callbacks
+    banned_callbacks = ["yesterday we", "in the last episode", "previously on", "in our last video", "continuing from", "kal humne", "pichle episode"]
+    if response_text and any(bc in response_text.lower() for bc in banned_callbacks):
+        print("[KissaMachine] Generated text contained serial callbacks. Enforcing fresh standalone script.")
+        response_text = None
+
+    if not response_text:
+        response_text = get_locked_standalone_script(episode_num, topic)
+
+    # Sanitize to guarantee 100% plain text narration without markdown or cues
+    response_text = sanitize_narration(response_text)
+    return response_text
 
 def generate_stage_2_storyboard(script_text, episode_num, topic):
     """
@@ -255,9 +279,9 @@ def run_episode_pipeline(target_episode=None, dry_run=False):
     with open(blueprint_file, "w", encoding="utf-8") as f:
         f.write(content)
         
-    # 2. Synthesize Conversational Audio (Gemini Studio Aoede / Edge-TTS Madhur)
-    print("[2/4] Synthesizing Natural Conversational Voiceover (Aoede / Madhur)...")
-    clean_narration = tts_service.generate_voiceover(content, audio_file, voice_name="Aoede")
+    # 2. Synthesize Conversational Audio (Natural Female Voice: Edge-TTS hi-IN-SwaraNeural)
+    print("[2/4] Synthesizing Natural Conversational Female Voiceover (hi-IN-SwaraNeural)...")
+    clean_narration = tts_service.generate_voiceover(content, audio_file, voice_name="hi-IN-SwaraNeural")
     
     with open(script_file, "w", encoding="utf-8") as f:
         f.write(clean_narration)
@@ -314,7 +338,7 @@ def run_episode_pipeline(target_episode=None, dry_run=False):
         state["history"].append({
             "episode_number": episode_num,
             "topic": topic,
-            "analogy_used": "Airport luggage conveyor with harmonic wave barcode stamps",
+            "analogy_used": f"Dynamic physical metaphor for {topic}",
             "completed_at": datetime.now().isoformat(),
             "video_path": video_file,
             "audio_path": audio_file

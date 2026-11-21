@@ -11,21 +11,24 @@ MODELS_TO_TRY = [
     "models/gemini-3-flash-preview"
 ]
 
-def generate_text(prompt, system_instruction=None, temperature=0.7):
+def generate_text(prompt, system_instruction=None, temperature=0.8, seed=None):
     for model in MODELS_TO_TRY:
         url = f"https://generativelanguage.googleapis.com/v1beta/{model}:generateContent?key={API_KEY}"
+        generation_config = {
+            "temperature": temperature
+        }
+        if seed is not None:
+            generation_config["seed"] = int(seed)
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "temperature": temperature
-            }
+            "generationConfig": generation_config
         }
         if system_instruction:
             payload["systemInstruction"] = {
                 "parts": [{"text": system_instruction}]
             }
         try:
-            resp = requests.post(url, json=payload, timeout=12)
+            resp = requests.post(url, json=payload, timeout=30)
             if resp.status_code == 200:
                 data = resp.json()
                 text = data["candidates"][0]["content"]["parts"][0]["text"]
